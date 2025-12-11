@@ -221,13 +221,16 @@ export class WorkflowLogger implements INodeType {
 			}
 
 			// Insert single aggregated log to MySQL
-			await insertLog(this, database, table, logData);
+			const insertId = await insertLog(this, database, table, logData);
 
 			// Return success
 			results.push({
 				json: {
 					success: true,
 					logged_at: new Date().toISOString(),
+					insert_id: insertId,
+					database: database,
+					table: table,
 					script_id: scriptId,
 					batches_aggregated: items.length,
 					log_data: logData,
@@ -260,7 +263,7 @@ async function insertLog(
 	database: string,
 	table: string,
 	logData: ILogData,
-): Promise<void> {
+): Promise<number> {
 	const credentials = await executeFunctions.getCredentials('mySqlApi');
 
 	// Dynamic require to avoid linting issues with n8n Cloud restrictions
@@ -285,7 +288,7 @@ async function insertLog(
 				(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`;
 
-		await connection.execute(query, [
+		const [result] = await connection.execute(query, [
 			logData.script_id,
 			logData.execution_mode,
 			logData.execution_type,
@@ -298,6 +301,9 @@ async function insertLog(
 			logData.event_summary,
 			logData.full_details,
 		]);
+
+		// Return the insert ID from MySQL
+		return (result as any).insertId;
 	} finally {
 		await connection.end();
 	}
